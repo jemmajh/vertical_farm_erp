@@ -2,7 +2,7 @@
 ##Mini ERP System for Company Inventory and Sales Management
 
 
-##Project overveiw
+**Project overveiw**
 This project implements a mini ERP system with a graphical user interface.
 The system manages customers, products (inventory), and sales quotations/orders.
 
@@ -14,62 +14,62 @@ The goal of the project is to demonstrate the core functionality of an ERP syste
 
 
 
-##Features
+**Features**
 User System
-	•	Registration and login
-	•	Multiple users
-	•	Orders record which user created them
+•	Registration and login
+•	Multiple users
+•	Orders record which user created them
 
 Customer Module
-	•	Create and edit customers
-	•	Store contact information
+•	Create and edit customers
+•	Store contact information
 
 Inventory Module
-	•	Manage products
-	•	Each product includes:
-	•	name
-	•	sales price
-	•	cost price
-	•	quantity
+•	Manage products
+•	Each product includes:
+•	name
+•	sales price
+•	cost price
+•	quantity
 
 Product Variants
 
 Products can have templates and variants.
 
 Sales/Quotation Module
-    Users can create orders by selecting:
-        •	a customer
-        •	products from inventory
-        •	quantities
+Users can create orders by selecting:
+•	a customer
+•	products from inventory
+•	quantities
+Each order can contain multiple order lines.
 
-    Each order can contain multiple order lines.
+Each order line calculates:
+•	margin €
+•	margin %
 
-    Each order line calculates:
-        •	margin €
-        •	margin %
-
-    The order also shows:
-        •	total price
-        •	total margin
+The order also shows:
+•	total price
+•	total margin
 
 
 statistics Module
-    The program provides useful statistics such as:
-        •	sold product quantities
-        •	inventory levels
-        •	best salesperson
+The program provides useful statistics such as:
+•	sold product quantities
+•	inventory levels
+•	best salesperson
 
-##Technology
-	•	Python
-	•	Tkinter GUI
-	•	JSON data storage
-	•	Python standard libraries
+Technology
+•	Python
+•	Tkinter GUI
+•	JSON data storage
+•	Python standard libraries
 
-##Running the program
-	1.	Install Python (3.10 or newer)
-	2.	Run the program:`python main.py`
+Running the program
+1.	Install Python (3.10 or newer)
+2.	Run the program:`python main.py`
 
-##Project Structure
+**Project Structure**
+
 project
 │
 ├── main.py
@@ -97,7 +97,7 @@ project
 └── tests
     └── test_order.py
 
-##Course Requirements
+**Course Requirements**
 - GUI
 - Customer Management
 - Inventory Management
@@ -110,7 +110,7 @@ project
 - Order statistics
 - Unit tests
 
-##Author
+**Author**
 Hanjemma Jeong
 791623
 Digital Systems and Design
