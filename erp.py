@@ -1,19 +1,18 @@
 from models import User, Customer, Product, Order, OrderLine, to_dict
-from storage import DataManager
-
+from storage import Storage
+import uuid
 
 class ERPSystem:
     def __init__(self):
-        self.data_manager = DataManager()
-        self.users = []
+        self.storage = Storage()
+        self.users = self.storage.load_users()
         self.customers = []
         self.products = []
         self.orders = []
         self.load_all()
 
     def load_all(self):
-        data = self.data_manager.load_data()
-
+        data = self.storage.load_data()
         self.users = [User(**u) for u in data.get("users", [])]
         self.customers = [Customer(**c) for c in data.get("customers", [])]
         self.products = [Product(**p) for p in data.get("products", [])]
@@ -32,7 +31,8 @@ class ERPSystem:
             "products": [to_dict(product) for product in self.products],
             "orders": [to_dict(order) for order in self.orders],
         }
-        self.data_manager.save_data(data)
+        self.storage.save_data(data)
+
 
     # ---------- Users ----------
     def register_user(self, username: str, password: str):
@@ -43,9 +43,9 @@ class ERPSystem:
             if user.username == username:
                 return False, "Username already exists."
 
-        new_user = User.create(username, password)
+        new_user = User(str(uuid.uuid4()), username, password)
         self.users.append(new_user)
-        self.save_all()
+        self.storage.save_users(self.users)
         return True, "User registered successfully."
 
     def authenticate(self, username: str, password: str):

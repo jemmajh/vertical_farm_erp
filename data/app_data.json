@@ -1,5 +1,11 @@
 {
-  "users": [],
+  "users": [
+    {
+      "id": "6b02b0d8-9817-40ac-b609-7d17ba066639",
+      "username": "Jemma",
+      "password": "0421"
+    }
+  ],
   "customers": [],
   "products": [],
   "orders": []

@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from erp import ERPSystem
 
-
+print("RUNNING THIS FILE")
 class ERPApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -14,7 +14,13 @@ class ERPApp(tk.Tk):
         self.current_order_lines = []
 
         self.container = tk.Frame(self)
-        self.container.pack(fill="both", expand=True)
+        self.container.grid(row=0, column=0, sticky="nsew")
+
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        self.container.grid_rowconfigure(0, weight=1)
+        self.container.grid_columnconfigure(0, weight=1)
 
         self.frames = {}
 
@@ -42,16 +48,21 @@ class LoginFrame(tk.Frame):
         form = tk.Frame(self)
         form.pack(pady=20)
 
-        tk.Label(form, text="Username").grid(row=0, column=0, padx=10, pady=10)
-        self.username_entry = tk.Entry(form)
-        self.username_entry.grid(row=0, column=1)
+        tk.Label(form, text="Username").grid(row=0, column=0, padx=10, pady=10, sticky="e")
+        self.username_entry = tk.Entry(form, width=25)
+        self.username_entry.grid(row=0, column=1, padx=10, pady=10)
+        self.username_entry.focus_set()
+        self.after(100, lambda: self.username_entry.focus_force())
 
-        tk.Label(form, text="Password").grid(row=1, column=0, padx=10, pady=10)
-        self.password_entry = tk.Entry(form, show="*")
-        self.password_entry.grid(row=1, column=1)
+
+        tk.Label(form, text="Password").grid(row=1, column=0, padx=10, pady=10, sticky="e")
+        self.password_entry = tk.Entry(form, show="*", width=25)
+        self.password_entry.grid(row=1, column=1, padx=10, pady=10)
 
         tk.Button(self, text="Login", width=15, command=self.login).pack(pady=5)
         tk.Button(self, text="Register", width=15, command=self.register).pack(pady=5)
+
+
 
     def login(self):
         username = self.username_entry.get().strip()
