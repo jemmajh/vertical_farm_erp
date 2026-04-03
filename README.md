@@ -34,7 +34,7 @@ The graphical user interface will open and allow the user to login and use the E
 ## Schedule
 
 Time spent so far:  
-Approximately X hours.
+Approximately  hours.
 
 Changes to schedule:
 Minor adjustments were made to focus more on ERP functionality and simplify the simulation features.

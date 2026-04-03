@@ -34,7 +34,7 @@ class ERPSystem:
         self.storage.save_data(data)
 
 
-    # ---------- Users ----------
+    # Users
     def register_user(self, username: str, password: str):
         if not username or not password:
             return False, "Username and password cannot be empty."
@@ -54,7 +54,7 @@ class ERPSystem:
                 return True, user
         return False, None
 
-    # ---------- Customers ----------
+    #  Customers
     def add_customer(self, name: str, address: str, phone: str, email: str):
         if not name:
             return False, "Customer name is required."
@@ -64,7 +64,11 @@ class ERPSystem:
         self.save_all()
         return True, "Customer added."
 
-    # ---------- Products ----------
+    def delete_customer(self, customer_id):
+        self.customers = [c for c in self.customers if c.id != customer_id]
+        self.save_all()
+
+    # Products
     def add_product(self, name: str, sales_price: float, cost_price: float, quantity: int):
         if not name:
             return False, "Product name is required."
@@ -77,7 +81,11 @@ class ERPSystem:
         self.save_all()
         return True, "Product added."
 
-    # ---------- Orders ----------
+    def delete_product(self, product_id):
+        self.products = [p for p in self.products if p.id != product_id]
+        self.save_all()
+
+    # Orders
     def create_order(self, customer_id: str, created_by_user: str, order_requests):
         customer = self.get_customer_by_id(customer_id)
         if customer is None:
@@ -108,7 +116,43 @@ class ERPSystem:
         self.save_all()
         return True, "Order created successfully."
 
-    # ---------- Helpers ----------
+    def delete_order(self, order_id):
+        self.orders = [o for o in self.orders if o.id != order_id]
+        self.save_all()
+
+    # Farms
+    def calculate_farm_stats(self):
+        data = self.storage.load_data()
+        farm = data.get("farm", {})
+
+        if not farm:
+            return None
+
+        area = farm["length"] * farm["width"] * farm["floors"] * farm["efficiency"]
+
+        total_revenue = 0
+
+        for p in self.products:
+            # assume yield per m2 (simplified)
+            yield_per_m2 = 50  # you can customize later
+            total_kg = yield_per_m2 * area
+            revenue = total_kg * p.sales_price
+            total_revenue += revenue
+
+        energy_per_m2 = 710
+        energy_price = 0.08
+
+        total_energy = energy_per_m2 * area
+        energy_cost = total_energy * energy_price
+
+        profit = total_revenue - energy_cost
+
+        return {
+            "revenue": total_revenue,
+            "cost": energy_cost,
+            "profit": profit
+        }
+    # Helpers
     def get_customer_by_id(self, customer_id: str):
         for customer in self.customers:
             if customer.id == customer_id:

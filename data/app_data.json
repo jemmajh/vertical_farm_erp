@@ -6,7 +6,22 @@
       "password": "0421"
     }
   ],
-  "customers": [],
+  "customers": [
+    {
+      "id": "3ab5a61b-3c6e-47de-9979-c53596f814ab",
+      "name": "Jemma",
+      "address": "Tiet\u00e4j\u00e4ntie 4B 45",
+      "phone": "0413111499",
+      "email": "hanjemma.jeong@aalto.fi"
+    }
+  ],
   "products": [],
-  "orders": []
+  "orders": [],
+  "farm": {
+    "length": 30.0,
+    "width": 20.0,
+    "height": 20.0,
+    "floors": 6,
+    "efficiency": 80.0
+  }
 }
