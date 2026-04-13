@@ -285,9 +285,62 @@ class CustomerDialog(QDialog):
         }
 
 
+class TemplateDialog(QDialog):
+
+    def __init__(self, parent=None, template=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Template" if template else "New Product Template")
+        self.setMinimumWidth(420)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        note = QLabel(
+            "Templates group product variants together. "
+            "Templates themselves cannot be sold — only their variants can."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet("color:#78909C; font-size:11px; padding:4px 0;")
+        layout.addWidget(note)
+
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.setSpacing(10)
+
+        self._name = QLineEdit()
+        self._desc = QLineEdit()
+        form.addRow("Template Name *", self._name)
+        form.addRow("Description", self._desc)
+
+        if template:
+            self._name.setText(template.name)
+            self._desc.setText(template.description)
+
+        layout.addLayout(form)
+
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        btns.accepted.connect(self._validate)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    def _validate(self):
+        if not self._name.text().strip():
+            QMessageBox.warning(self, "Validation", "Template name is required.")
+            return
+        self.accept()
+
+    def get_data(self) -> dict:
+        return {
+            "name": self._name.text().strip(),
+            "description": self._desc.text().strip(),
+        }
+
+
 class ProductDialog(QDialog):
 
-    def __init__(self, parent=None, product=None):
+    def __init__(self, parent=None, product=None, template_name: str | None = None):
         super().__init__(parent)
         self.setWindowTitle("Edit Product" if product else "New Product")
         self.setMinimumWidth(420)
@@ -298,6 +351,15 @@ class ProductDialog(QDialog):
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         form.setSpacing(10)
+
+        # Show template badge if this is a variant
+        if template_name:
+            tmpl_lbl = QLabel(f"  {template_name}  ")
+            tmpl_lbl.setStyleSheet(
+                "color:#6A1B9A; background:#F3E5F5; border-radius:4px; "
+                "font-weight:bold; padding:3px 6px;"
+            )
+            form.addRow("Variant of:", tmpl_lbl)
 
         self._name = QLineEdit()
         self._sales = QDoubleSpinBox()
@@ -386,7 +448,11 @@ class OrderDialog(QDialog):
         self._customer_map = {c.name: c.id for c in erp.customers}
         self._customer_cb.addItems(self._customer_map.keys())
 
+        self._status_cb = QComboBox()
+        self._status_cb.addItems(["Quotation", "Order"])
+
         hdr_form.addRow("Customer *", self._customer_cb)
+        hdr_form.addRow("Status *", self._status_cb)
         root.addWidget(hdr)
 
         lines_grp = QGroupBox("Order Lines")
@@ -436,6 +502,7 @@ class OrderDialog(QDialog):
         if order:
             if order.customer_name in self._customer_map:
                 self._customer_cb.setCurrentText(order.customer_name)
+            self._status_cb.setCurrentText(order.status.capitalize())
             for line in order.lines:
                 self._lines.append((line.product_id, line.quantity))
                 fill_table_row(self._lines_table, [
@@ -509,7 +576,7 @@ class OrderDialog(QDialog):
         cname = self._customer_cb.currentText()
         return {
             "customer_id": self._customer_map[cname],
-            "status": "order",
+            "status": self._status_cb.currentText().lower(),
             "lines": list(self._lines),
         }
 
@@ -702,37 +769,114 @@ class ProductWidget(QWidget):
         root.setSpacing(10)
         root.addWidget(section_title("Products & Inventory"))
 
-        toolbar = QHBoxLayout()
-        self._add_btn = btn("＋ New Product", "primary")
-        self._edit_btn = btn("✏ Edit", "warning")
-        self._del_btn = btn("✕ Delete", "danger")
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.setChildrenCollapsible(False)
+
+        # Templates panel
+        tmpl_panel = QWidget()
+        tmpl_lay = QVBoxLayout(tmpl_panel)
+        tmpl_lay.setContentsMargins(0, 0, 0, 4)
+        tmpl_lay.setSpacing(6)
+
+        tmpl_hdr = QLabel("Product Templates  (group related variants — templates cannot be sold directly)")
+        tmpl_hdr.setStyleSheet("font-weight:bold; color:#6A1B9A; font-size:11px;")
+        tmpl_lay.addWidget(tmpl_hdr)
+
+        tmpl_bar = QHBoxLayout()
+        self._tmpl_add_btn = btn("+ New Template", "secondary")
+        self._tmpl_edit_btn = btn("Edit", "secondary")
+        self._tmpl_del_btn = btn("Delete", "danger")
+        self._variant_btn = btn("+ Add Variant to Selected", "primary")
+        self._tmpl_add_btn.clicked.connect(self._on_add_template)
+        self._tmpl_edit_btn.clicked.connect(self._on_edit_template)
+        self._tmpl_del_btn.clicked.connect(self._on_delete_template)
+        self._variant_btn.clicked.connect(self._on_add_variant)
+        tmpl_bar.addWidget(self._tmpl_add_btn)
+        tmpl_bar.addWidget(self._tmpl_edit_btn)
+        tmpl_bar.addWidget(self._tmpl_del_btn)
+        tmpl_bar.addWidget(self._variant_btn)
+        tmpl_bar.addStretch()
+        tmpl_lay.addLayout(tmpl_bar)
+
+        self._tmpl_table = make_table(["Template Name", "Description", "Variants"])
+        self._tmpl_table.setMaximumHeight(150)
+        tmpl_lay.addWidget(self._tmpl_table)
+        splitter.addWidget(tmpl_panel)
+
+        # Products panel
+        prod_panel = QWidget()
+        prod_lay = QVBoxLayout(prod_panel)
+        prod_lay.setContentsMargins(0, 4, 0, 0)
+        prod_lay.setSpacing(6)
+
+        prod_hdr = QLabel("Products / Variants  (purple rows = linked to a template)")
+        prod_hdr.setStyleSheet("font-weight:bold; color:#37474F; font-size:11px;")
+        prod_lay.addWidget(prod_hdr)
+
+        prod_bar = QHBoxLayout()
+        self._add_btn = btn("+ New Standalone", "primary")
+        self._edit_btn = btn("Edit", "warning")
+        self._del_btn = btn("Delete", "danger")
         self._add_btn.clicked.connect(self._on_add)
         self._edit_btn.clicked.connect(self._on_edit)
         self._del_btn.clicked.connect(self._on_delete)
-        toolbar.addWidget(self._add_btn)
-        toolbar.addWidget(self._edit_btn)
-        toolbar.addWidget(self._del_btn)
-        toolbar.addStretch()
-        root.addLayout(toolbar)
+        prod_bar.addWidget(self._add_btn)
+        prod_bar.addWidget(self._edit_btn)
+        prod_bar.addWidget(self._del_btn)
+        prod_bar.addStretch()
+        prod_lay.addLayout(prod_bar)
 
         self._table = make_table(
-            ["Name", "Sales €", "Cost €", "Margin €", "Margin %", "Qty", "Description"]
+            ["Name", "Template", "Sales €", "Cost €", "Margin €", "Margin %", "Qty"]
         )
         self._table.doubleClicked.connect(self._on_edit)
-        root.addWidget(self._table)
+        prod_lay.addWidget(self._table)
+        splitter.addWidget(prod_panel)
+
+        root.addWidget(splitter)
 
     def refresh(self):
-        self._table.setRowCount(0)
+        # Templates
+        self._tmpl_table.setRowCount(0)
+        templates = self.erp.templates
+        variant_counts: dict[str, int] = {}
         for p in self.erp.products:
+            if p.template_id:
+                variant_counts[p.template_id] = variant_counts.get(p.template_id, 0) + 1
+        for t in templates:
+            fill_table_row(self._tmpl_table, [
+                t.name,
+                t.description or "—",
+                str(variant_counts.get(t.id, 0)),
+            ])
+
+        # Products
+        self._table.setRowCount(0)
+        tmpl_map = {t.id: t.name for t in templates}
+        for p in self.erp.products:
+            tmpl_name = tmpl_map.get(p.template_id, "—") if p.template_id else "—"
             fill_table_row(self._table, [
                 p.name,
+                tmpl_name,
                 f"{p.sales_price:.2f}",
                 f"{p.cost_price:.2f}",
                 f"{p.margin_eur:.2f}",
                 f"{p.margin_percent:.1f}%",
                 p.quantity,
-                p.description,
             ])
+            # Highlight variant rows in light purple
+            if p.template_id:
+                row_idx = self._table.rowCount() - 1
+                for col in range(self._table.columnCount()):
+                    item = self._table.item(row_idx, col)
+                    if item:
+                        item.setBackground(QColor("#F3E5F5"))
+
+    def _selected_template(self):
+        row = self._tmpl_table.currentRow()
+        if row < 0:
+            return None
+        return self.erp.templates[row]
 
     def _selected_product(self):
         row = self._table.currentRow()
@@ -740,6 +884,66 @@ class ProductWidget(QWidget):
             return None
         return self.erp.products[row]
 
+    # Template actions
+    def _on_add_template(self):
+        dlg = TemplateDialog(self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            d = dlg.get_data()
+            ok, msg = self.erp.add_template(d["name"], d["description"])
+            if ok:
+                self.refresh()
+            else:
+                QMessageBox.warning(self, "Error", msg)
+
+    def _on_edit_template(self):
+        t = self._selected_template()
+        if not t:
+            QMessageBox.information(self, "No selection", "Select a template to edit.")
+            return
+        dlg = TemplateDialog(self, template=t)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            d = dlg.get_data()
+            ok, msg = self.erp.update_template(t.id, d["name"], d["description"])
+            if ok:
+                self.refresh()
+            else:
+                QMessageBox.warning(self, "Error", msg)
+
+    def _on_delete_template(self):
+        t = self._selected_template()
+        if not t:
+            QMessageBox.information(self, "No selection", "Select a template to delete.")
+            return
+        reply = QMessageBox.question(
+            self, "Confirm Delete",
+            f"Delete template '{t.name}'?\nIts variants will become standalone products.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.erp.delete_template(t.id)
+            self.refresh()
+
+    def _on_add_variant(self):
+        t = self._selected_template()
+        if not t:
+            QMessageBox.information(
+                self, "No selection",
+                "Select a template in the Templates table first, then click Add Variant."
+            )
+            return
+        dlg = ProductDialog(self, template_name=t.name)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            d = dlg.get_data()
+            ok, msg = self.erp.add_product(
+                d["name"], d["sales_price"], d["cost_price"],
+                d["quantity"], d["description"], template_id=t.id
+            )
+            if ok:
+                self.refresh()
+            else:
+                QMessageBox.warning(self, "Error", msg)
+
+    # Product actions
     def _on_add(self):
         dlg = ProductDialog(self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
@@ -757,11 +961,17 @@ class ProductWidget(QWidget):
         if not p:
             QMessageBox.information(self, "No selection", "Select a product to edit.")
             return
-        dlg = ProductDialog(self, product=p)
+        tmpl_name = None
+        if p.template_id:
+            t = self.erp.get_template_by_id(p.template_id)
+            if t:
+                tmpl_name = t.name
+        dlg = ProductDialog(self, product=p, template_name=tmpl_name)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.get_data()
             ok, msg = self.erp.update_product(
-                p.id, d["name"], d["sales_price"], d["cost_price"], d["quantity"], d["description"]
+                p.id, d["name"], d["sales_price"], d["cost_price"],
+                d["quantity"], d["description"]
             )
             if ok:
                 self.refresh()
@@ -790,23 +1000,26 @@ class OrderWidget(QWidget):
         root.addWidget(section_title("Orders & Quotations"))
 
         toolbar = QHBoxLayout()
-        self._new_btn = btn("New Order", "primary")
+        self._new_btn = btn("+ New", "primary")
         self._view_btn = btn("View", "secondary")
         self._edit_btn = btn("Edit", "warning")
+        self._confirm_btn = btn("Confirm as Order", "primary")
         self._del_btn = btn("Delete", "danger")
         self._new_btn.clicked.connect(self._on_new)
         self._view_btn.clicked.connect(self._on_view)
         self._edit_btn.clicked.connect(self._on_edit)
+        self._confirm_btn.clicked.connect(self._on_confirm)
         self._del_btn.clicked.connect(self._on_delete)
         toolbar.addWidget(self._new_btn)
         toolbar.addWidget(self._view_btn)
         toolbar.addWidget(self._edit_btn)
+        toolbar.addWidget(self._confirm_btn)
         toolbar.addWidget(self._del_btn)
         toolbar.addStretch()
         root.addLayout(toolbar)
 
         self._table = make_table(
-            ["Order #", "Customer", "Date", "Status", "Total (€)", "Margin (€)", "Margin %"]
+            ["Order #", "Customer", "Date", "Status", "Created By", "Total (€)", "Margin (€)", "Margin %"]
         )
         self._table.doubleClicked.connect(self._on_view)
         root.addWidget(self._table)
@@ -819,10 +1032,20 @@ class OrderWidget(QWidget):
                 o.customer_name,
                 o.created_at,
                 o.status.capitalize(),
+                o.created_by_user,
                 f"{o.total_price:.2f}",
                 f"{o.total_margin:.2f}",
                 f"{o.margin_percent_total:.1f}%",
             ])
+            # Colour-code
+            row_idx = self._table.rowCount() - 1
+            status_item = self._table.item(row_idx, 3)
+            if o.status == "quotation":
+                status_item.setBackground(QColor("#FFF9C4"))
+                status_item.setForeground(QColor("#E65100"))
+            else:
+                status_item.setBackground(QColor("#E8F5E9"))
+                status_item.setForeground(QColor("#2E7D32"))
 
     def _selected_order(self):
         row = self._table.currentRow()
@@ -868,6 +1091,20 @@ class OrderWidget(QWidget):
             else:
                 QMessageBox.warning(self, "Error", msg)
 
+    def _on_confirm(self):
+        o = self._selected_order()
+        if not o:
+            QMessageBox.information(self, "No selection", "Select a quotation to confirm.")
+            return
+        if o.status == "order":
+            QMessageBox.information(self, "Already confirmed", "This is already confirmed as an order.")
+            return
+        ok, msg = self.erp.confirm_order(o.id)
+        if ok:
+            self.refresh()
+        else:
+            QMessageBox.warning(self, "Error", msg)
+
     def _on_delete(self):
         o = self._selected_order()
         if not o:
@@ -876,7 +1113,6 @@ class OrderWidget(QWidget):
         if confirm_delete(self, "order"):
             self.erp.delete_order(o.id)
             self.refresh()
-
 
 
 class FarmWidget(QWidget):
@@ -932,7 +1168,7 @@ class FarmWidget(QWidget):
         root.addWidget(scroll)
 
         btn_row = QHBoxLayout()
-        save_btn = btn("💾 Save Farm Config", "primary")
+        save_btn = btn("Save Farm Config", "primary")
         save_btn.clicked.connect(self._on_save)
         btn_row.addWidget(save_btn)
         btn_row.addStretch()
@@ -1055,7 +1291,7 @@ class StatsWidget(QWidget):
 
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
-        root.setSpacing(12)
+        root.setSpacing(10)
         root.addWidget(section_title("Statistics"))
 
         self._summary_lbl = QLabel()
@@ -1063,12 +1299,19 @@ class StatsWidget(QWidget):
         self._summary_lbl.setStyleSheet("font-size:13px;")
         root.addWidget(self._summary_lbl)
 
-        self._canvas = FigureCanvas(Figure(figsize=(7, 4), constrained_layout=False))
+        self._low_stock_lbl = QLabel()
+        self._low_stock_lbl.setWordWrap(True)
+        self._low_stock_lbl.setStyleSheet(
+            "color:#B71C1C; background:#FFEBEE; border-radius:5px; padding:6px 10px; font-size:12px;"
+        )
+        self._low_stock_lbl.hide()
+        root.addWidget(self._low_stock_lbl)
+
+        self._canvas = FigureCanvas(Figure(figsize=(9, 5.5), constrained_layout=False))
         root.addWidget(self._canvas)
-        root.addStretch()
 
     def refresh(self):
-        s = self.erp.get_stats()
+        s = self.erp.get_extended_stats()
         self._summary_lbl.setText(
             f"<b>Orders:</b> {s['order_count']}  &nbsp;|&nbsp; "
             f"<b>Customers:</b> {s['customer_count']}  &nbsp;|&nbsp; "
@@ -1078,43 +1321,92 @@ class StatsWidget(QWidget):
             f"<b>Profit:</b> €{s['profit']:.2f}  &nbsp;|&nbsp; "
             f"<b>Overall Margin:</b> {s['margin_pct']:.1f}%"
         )
+        # Low stock warning
+        if s["low_stock"]:
+            items = ", ".join(f"{p.name} ({p.quantity})" for p in s["low_stock"])
+            self._low_stock_lbl.setText(f"Low stock alert: {items}")
+            self._low_stock_lbl.show()
+        else:
+            self._low_stock_lbl.hide()
+
         self._draw_charts(s)
 
     def _draw_charts(self, s: dict):
         fig = self._canvas.figure
         fig.clear()
+        fig.subplots_adjust(hspace=0.45, wspace=0.35,
+                            left=0.08, right=0.97, top=0.93, bottom=0.12)
 
-        axes = fig.subplots(1, 2)
+        axes = fig.subplots(2, 2)
+        ax1, ax2 = axes[0]
+        ax3, ax4 = axes[1]
 
-        # Left: financial bar chart
-        ax1 = axes[0]
-        ax1.bar(
-            ["Revenue", "Cost", "Profit"],
-            [s["revenue"], s["cost"], s["profit"]],
-            color=["#4CAF50", "#EF5350", "#1976D2"],
-            width=0.5,
-        )
-        ax1.set_title("Financials", fontsize=10)
-        ax1.set_ylabel("€")
-        ax1.spines["top"].set_visible(False)
-        ax1.spines["right"].set_visible(False)
+        def _clean(ax):
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
 
-        # Right: per-order margin chart
-        ax2 = axes[1]
+        # Financials
+        vals = [s["revenue"], s["cost"], s["profit"]]
+        bars = ax1.bar(["Revenue", "Cost", "Profit"], vals,
+                       color=["#4CAF50", "#EF5350", "#1976D2"], width=0.5)
+        ax1.set_title("Financials", fontsize=9)
+        ax1.set_ylabel("€", fontsize=8)
+        ax1.tick_params(labelsize=8)
+        for bar, val in zip(bars, vals):
+            ax1.text(bar.get_x() + bar.get_width() / 2,
+                     bar.get_height() + max(vals, default=1) * 0.02,
+                     f"€{val:.0f}", ha="center", va="bottom", fontsize=7)
+        _clean(ax1)
+
+        # Top-right: Margin % per Order
         orders = self.erp.orders
         if orders:
             nums = [f"#{o.order_number}" for o in orders]
             margins = [o.margin_percent_total for o in orders]
             ax2.bar(nums, margins, color="#81C784", width=0.5)
-            ax2.axhline(0, color="grey", linewidth=0.8)
-            ax2.set_title("Margin % per Order", fontsize=10)
-            ax2.set_ylabel("%")
-            ax2.tick_params(axis="x", rotation=45)
-            ax2.spines["top"].set_visible(False)
-            ax2.spines["right"].set_visible(False)
+            ax2.axhline(0, color="grey", linewidth=0.7)
+            ax2.tick_params(axis="x", rotation=40, labelsize=7)
+            ax2.tick_params(axis="y", labelsize=8)
         else:
-            ax2.text(0.5, 0.5, "No orders yet", ha="center", va="center", transform=ax2.transAxes)
-            ax2.set_title("Margin % per Order", fontsize=10)
+            ax2.text(0.5, 0.5, "No orders yet", ha="center", va="center",
+                     transform=ax2.transAxes, fontsize=9, color="#9E9E9E")
+        ax2.set_title("Margin % per Order", fontsize=9)
+        ax2.set_ylabel("%", fontsize=8)
+        _clean(ax2)
+
+        # Bottom-left: Revenue by Salesperson
+        sp_rev = s.get("salesperson_revenue", {})
+        if sp_rev:
+            users = list(sp_rev.keys())
+            revs = [sp_rev[u] for u in users]
+            bars3 = ax3.bar(users, revs, color="#42A5F5", width=0.5)
+            for bar, val in zip(bars3, revs):
+                ax3.text(bar.get_x() + bar.get_width() / 2,
+                         bar.get_height() + max(revs, default=1) * 0.02,
+                         f"€{val:.0f}", ha="center", va="bottom", fontsize=7)
+            ax3.tick_params(axis="x", rotation=20, labelsize=8)
+            ax3.tick_params(axis="y", labelsize=8)
+        else:
+            ax3.text(0.5, 0.5, "No data yet", ha="center", va="center",
+                     transform=ax3.transAxes, fontsize=9, color="#9E9E9E")
+        ax3.set_title("Revenue by Salesperson", fontsize=9)
+        ax3.set_ylabel("€", fontsize=8)
+        _clean(ax3)
+
+        #  Bottom-right: Top Products by Qty Sold
+        top = s.get("top_products", [])
+        if top:
+            names, qtys = zip(*top)
+            bars4 = ax4.barh(list(names), list(qtys), color="#FF8A65", height=0.5)
+            ax4.tick_params(axis="y", labelsize=7)
+            ax4.tick_params(axis="x", labelsize=8)
+            ax4.invert_yaxis()
+        else:
+            ax4.text(0.5, 0.5, "No sales yet", ha="center", va="center",
+                     transform=ax4.transAxes, fontsize=9, color="#9E9E9E")
+        ax4.set_title("Top Products by Qty Sold", fontsize=9)
+        ax4.set_xlabel("Units", fontsize=8)
+        _clean(ax4)
 
         self._canvas.draw()
 
@@ -1138,9 +1430,9 @@ class ExportWidget(QWidget):
         root.addWidget(desc)
 
         for label, handler in [
-            ("📋 Export Customers (CSV)", self._export_customers),
-            ("📦 Export Products (CSV)", self._export_products),
-            ("📄 Export Orders (CSV)", self._export_orders),
+            ("Export Customers (CSV)", self._export_customers),
+            ("Export Products (CSV)", self._export_products),
+            ("Export Orders (CSV)", self._export_orders),
         ]:
             b = btn(label, "secondary")
             b.setMinimumHeight(44)

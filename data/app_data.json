@@ -60,7 +60,15 @@
     "width": 20.0,
     "height": 20.0,
     "floors": 6,
-    "efficiency": 80.0
+    "efficiency": 80.0,
+    "electricity_rate": 0.25,
+    "water_rate": 0.003,
+    "kwh_per_sqm_per_day": 0.3,
+    "liters_per_sqm_per_day": 3.0,
+    "seed_cost_per_sqm": 1.0,
+    "yield_kg_per_sqm": 3.0,
+    "price_per_kg": 8.0,
+    "cycle_days": 30
   },
   "next_order_number": 2
 }

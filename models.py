@@ -35,14 +35,25 @@ class Customer:
 
 
 @dataclass
+class ProductTemplate:
+    id: str
+    name: str
+    description: str = ""
+
+    @staticmethod
+    def create(name: str, description: str = "") -> "ProductTemplate":
+        return ProductTemplate(id=new_id(), name=name, description=description)
+
+
+@dataclass
 class Product:
     id: str
     name: str
     sales_price: float
     cost_price: float
     quantity: int
-    quantity: int
     description: str = ""
+    template_id: str | None = None
 
     @staticmethod
     def create(
@@ -51,6 +62,7 @@ class Product:
             cost_price: float,
             quantity: int,
             description: str = "",
+            template_id: str | None = None,
     ) -> "Product":
         return Product(
             id=new_id(),
@@ -59,6 +71,7 @@ class Product:
             cost_price=cost_price,
             quantity=quantity,
             description=description,
+            template_id=template_id,
         )
 
     @property
@@ -159,22 +172,19 @@ class Order:
 
 @dataclass
 class FarmConfig:
-    length: float  # metres
-    width: float  # metres
-    height: float  # metres
-    floors: int  # number of growing levels / racks
-    efficiency: float  # fraction of floor area actually used for growing (0–1)
-
-    electricity_rate: float  # €/kWh
-    water_rate: float  # €/litre
-
+    length: float
+    width: float
+    height: float
+    floors: int
+    efficiency: float
+    electricity_rate: float
+    water_rate: float
     kwh_per_sqm_per_day: float
     liters_per_sqm_per_day: float
-
-    seed_cost_per_sqm: float  # € per m² per cycle
-    yield_kg_per_sqm: float  # kg harvested per m² per cycle
-    price_per_kg: float  # €/kg (selling price)
-    cycle_days: int  # days from seeding to harvest
+    seed_cost_per_sqm: float
+    yield_kg_per_sqm: float
+    price_per_kg: float
+    cycle_days: int
 
     @property
     def growing_area(self) -> float:
@@ -214,6 +224,7 @@ class FarmConfig:
             "profit": profit,
             "margin_pct": margin_pct,
         }
+
 
 def to_dict(obj) -> dict:
     return asdict(obj)

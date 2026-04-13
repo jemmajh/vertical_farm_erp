@@ -1,159 +1,371 @@
+"""
+storage.py – SQLite for VacuumWood Mini ERP
+
+Database file: data/app_data.db
+Schema
+  users              – login credentials
+  customers          – contact information
+  product_templates  – grouping templates for product variants
+  products           – inventory with pricing (optionally linked to a template)
+  orders             – order headers
+  order_lines        – individual product lines per order
+  farm_config        – single-row farm configuration (singleton)
+  settings           – key/value store (used for next_order_number counter)
+"""
 from __future__ import annotations
 
-import json
+import sqlite3
 import os
-from models import User, Customer, Product, OrderLine, Order, FarmConfig, to_dict
+from models import User, Customer, Product, ProductTemplate, OrderLine, Order, FarmConfig
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-_DEFAULT_PATH = os.path.join(_BASE_DIR, "data", "app_data.json")
+_DEFAULT_PATH = os.path.join(_BASE_DIR, "data", "erp.db")
 
-_EMPTY_DB = {
-    "users": [],
-    "customers": [],
-    "products": [],
-    "orders": [],
-    "farm": None,
-    "next_order_number": 1,
-}
+_DDL = """
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS users (
+    id       TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS customers (
+    id      TEXT PRIMARY KEY,
+    name    TEXT NOT NULL,
+    address TEXT DEFAULT '',
+    phone   TEXT DEFAULT '',
+    email   TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS product_templates (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS products (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    sales_price REAL NOT NULL,
+    cost_price  REAL NOT NULL,
+    quantity    INTEGER NOT NULL,
+    description TEXT DEFAULT '',
+    template_id TEXT DEFAULT NULL
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+    id               TEXT PRIMARY KEY,
+    order_number     INTEGER NOT NULL,
+    customer_id      TEXT NOT NULL,
+    customer_name    TEXT NOT NULL,
+    customer_address TEXT DEFAULT '',
+    customer_phone   TEXT DEFAULT '',
+    customer_email   TEXT DEFAULT '',
+    created_by_user  TEXT NOT NULL,
+    created_at       TEXT NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'order',
+    total_price      REAL DEFAULT 0.0,
+    total_cost       REAL DEFAULT 0.0,
+    total_margin     REAL DEFAULT 0.0
+);
+
+CREATE TABLE IF NOT EXISTS order_lines (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id       TEXT NOT NULL,
+    product_id     TEXT NOT NULL,
+    product_name   TEXT NOT NULL,
+    quantity       INTEGER NOT NULL,
+    sales_price    REAL NOT NULL,
+    cost_price     REAL NOT NULL,
+    margin_eur     REAL NOT NULL,
+    margin_percent REAL NOT NULL,
+    line_total     REAL NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS farm_config (
+    id                    INTEGER PRIMARY KEY CHECK (id = 1),
+    length                REAL,
+    width                 REAL,
+    height                REAL,
+    floors                INTEGER,
+    efficiency            REAL,
+    electricity_rate      REAL,
+    water_rate            REAL,
+    kwh_per_sqm_per_day   REAL,
+    liters_per_sqm_per_day REAL,
+    seed_cost_per_sqm     REAL,
+    yield_kg_per_sqm      REAL,
+    price_per_kg          REAL,
+    cycle_days            INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO settings (key, value) VALUES ('next_order_number', '1');
+"""
+
 
 class Storage:
     def __init__(self, filepath: str = None):
         self.filepath = filepath or _DEFAULT_PATH
         os.makedirs(os.path.dirname(self.filepath), exist_ok=True)
-        self._ensure_file_exists()
+        self._init_db()
 
-    def _ensure_file_exists(self):
-        if not os.path.exists(self.filepath):
-            with open(self.filepath, "w", encoding="utf-8") as f:
-                json.dump(_EMPTY_DB, f, indent=2)
+    # Internal
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.filepath)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
 
-    def load_data(self) -> dict:
-        with open(self.filepath, "r", encoding="utf-8") as f:
-            return json.load(f)
+    def _init_db(self):
+        conn = sqlite3.connect(self.filepath)
+        conn.row_factory = sqlite3.Row
+        conn.executescript(_DDL)
+        # Migration: add columns that may be missing from older DB files
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(products)").fetchall()]
+        if "template_id" not in cols:
+            conn.execute("ALTER TABLE products ADD COLUMN template_id TEXT DEFAULT NULL")
+            conn.commit()
+        conn.close()
 
-    def save_data(self, data: dict):
-        with open(self.filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-
+    # Users
     def load_users(self) -> list[User]:
-        data = self.load_data()
-        return [User(u["id"], u["username"], u["password"]) for u in data.get("users", [])]
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, username, password FROM users"
+            ).fetchall()
+        return [User(r["id"], r["username"], r["password"]) for r in rows]
 
     def save_users(self, users: list[User]):
-        data = self.load_data()
-        data["users"] = [to_dict(u) for u in users]
-        self.save_data(data)
+        with self._connect() as conn:
+            conn.execute("DELETE FROM users")
+            conn.executemany(
+                "INSERT INTO users (id, username, password) VALUES (?, ?, ?)",
+                [(u.id, u.username, u.password) for u in users],
+            )
 
-    # customers
-
+    # Customers
     def load_customers(self) -> list[Customer]:
-        data = self.load_data()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, name, address, phone, email FROM customers"
+            ).fetchall()
         return [
-            Customer(c["id"], c["name"], c["address"], c["phone"], c["email"])
-            for c in data.get("customers", [])
+            Customer(r["id"], r["name"], r["address"], r["phone"], r["email"])
+            for r in rows
         ]
 
     def save_customers(self, customers: list[Customer]):
-        data = self.load_data()
-        data["customers"] = [to_dict(c) for c in customers]
-        self.save_data(data)
+        with self._connect() as conn:
+            conn.execute("DELETE FROM customers")
+            conn.executemany(
+                "INSERT INTO customers (id, name, address, phone, email) VALUES (?, ?, ?, ?, ?)",
+                [(c.id, c.name, c.address, c.phone, c.email) for c in customers],
+            )
 
-    #products
+    # Product Templates
+    def load_templates(self) -> list[ProductTemplate]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, name, description FROM product_templates ORDER BY name"
+            ).fetchall()
+        return [ProductTemplate(r["id"], r["name"], r["description"] or "") for r in rows]
 
+    def save_templates(self, templates: list[ProductTemplate]):
+        with self._connect() as conn:
+            conn.execute("DELETE FROM product_templates")
+            conn.executemany(
+                "INSERT INTO product_templates (id, name, description) VALUES (?, ?, ?)",
+                [(t.id, t.name, t.description) for t in templates],
+            )
+
+    # Products
     def load_products(self) -> list[Product]:
-        data = self.load_data()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, name, sales_price, cost_price, quantity, description, template_id FROM products"
+            ).fetchall()
         return [
             Product(
-                id=p["id"],
-                name=p["name"],
-                sales_price=p["sales_price"],
-                cost_price=p["cost_price"],
-                quantity=p["quantity"],
-                description=p.get("description", ""),
+                id=r["id"],
+                name=r["name"],
+                sales_price=r["sales_price"],
+                cost_price=r["cost_price"],
+                quantity=r["quantity"],
+                description=r["description"] or "",
+                template_id=r["template_id"],
             )
-            for p in data.get("products", [])
+            for r in rows
         ]
 
     def save_products(self, products: list[Product]):
-        data = self.load_data()
-        data["products"] = [to_dict(p) for p in products]
-        self.save_data(data)
-
-    #orders
-
-    def load_orders(self) -> list[Order]:
-        data = self.load_data()
-        orders = []
-        for o in data.get("orders", []):
-            lines = [
-                OrderLine(
-                    product_id=l["product_id"],
-                    product_name=l["product_name"],
-                    quantity=l["quantity"],
-                    sales_price=l["sales_price"],
-                    cost_price=l["cost_price"],
-                    margin_eur=l["margin_eur"],
-                    margin_percent=l["margin_percent"],
-                    line_total=l["line_total"],
-                )
-                for l in o.get("lines", [])
-            ]
-            orders.append(
-                Order(
-                    id=o["id"],
-                    order_number=o.get("order_number", 0),
-                    customer_id=o["customer_id"],
-                    customer_name=o["customer_name"],
-                    customer_address=o.get("customer_address", ""),
-                    customer_phone=o.get("customer_phone", ""),
-                    customer_email=o.get("customer_email", ""),
-                    created_by_user=o["created_by_user"],
-                    created_at=o["created_at"],
-                    status=o.get("status", "order"),
-                    lines=lines,
-                    total_price=o["total_price"],
-                    total_cost=o.get("total_cost", 0.0),
-                    total_margin=o["total_margin"],
-                )
+        with self._connect() as conn:
+            conn.execute("DELETE FROM products")
+            conn.executemany(
+                """INSERT INTO products
+                   (id, name, sales_price, cost_price, quantity, description, template_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                [
+                    (p.id, p.name, p.sales_price, p.cost_price, p.quantity,
+                     p.description, p.template_id)
+                    for p in products
+                ],
             )
+
+    # Orders
+    def load_orders(self) -> list[Order]:
+        with self._connect() as conn:
+            order_rows = conn.execute(
+                """SELECT id, order_number, customer_id, customer_name,
+                          customer_address, customer_phone, customer_email,
+                          created_by_user, created_at, status,
+                          total_price, total_cost, total_margin
+                   FROM orders ORDER BY order_number"""
+            ).fetchall()
+
+            orders = []
+            for o in order_rows:
+                line_rows = conn.execute(
+                    """SELECT product_id, product_name, quantity,
+                              sales_price, cost_price,
+                              margin_eur, margin_percent, line_total
+                       FROM order_lines WHERE order_id = ?""",
+                    (o["id"],),
+                ).fetchall()
+
+                lines = [
+                    OrderLine(
+                        product_id=l["product_id"],
+                        product_name=l["product_name"],
+                        quantity=l["quantity"],
+                        sales_price=l["sales_price"],
+                        cost_price=l["cost_price"],
+                        margin_eur=l["margin_eur"],
+                        margin_percent=l["margin_percent"],
+                        line_total=l["line_total"],
+                    )
+                    for l in line_rows
+                ]
+
+                orders.append(
+                    Order(
+                        id=o["id"],
+                        order_number=o["order_number"],
+                        customer_id=o["customer_id"],
+                        customer_name=o["customer_name"],
+                        customer_address=o["customer_address"] or "",
+                        customer_phone=o["customer_phone"] or "",
+                        customer_email=o["customer_email"] or "",
+                        created_by_user=o["created_by_user"],
+                        created_at=o["created_at"],
+                        status=o["status"],
+                        lines=lines,
+                        total_price=o["total_price"],
+                        total_cost=o["total_cost"],
+                        total_margin=o["total_margin"],
+                    )
+                )
         return orders
 
     def save_orders(self, orders: list[Order]):
-        data = self.load_data()
-        data["orders"] = [to_dict(o) for o in orders]
-        self.save_data(data)
+        with self._connect() as conn:
+            conn.execute("DELETE FROM order_lines")
+            conn.execute("DELETE FROM orders")
+            for o in orders:
+                conn.execute(
+                    """INSERT INTO orders
+                       (id, order_number, customer_id, customer_name,
+                        customer_address, customer_phone, customer_email,
+                        created_by_user, created_at, status,
+                        total_price, total_cost, total_margin)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        o.id, o.order_number, o.customer_id, o.customer_name,
+                        o.customer_address, o.customer_phone, o.customer_email,
+                        o.created_by_user, o.created_at, o.status,
+                        o.total_price, o.total_cost, o.total_margin,
+                    ),
+                )
+                conn.executemany(
+                    """INSERT INTO order_lines
+                       (order_id, product_id, product_name, quantity,
+                        sales_price, cost_price, margin_eur, margin_percent, line_total)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    [
+                        (
+                            o.id, l.product_id, l.product_name, l.quantity,
+                            l.sales_price, l.cost_price,
+                            l.margin_eur, l.margin_percent, l.line_total,
+                        )
+                        for l in o.lines
+                    ],
+                )
 
-
+    # Order number counter
     def get_next_order_number(self) -> int:
-        data = self.load_data()
-        n = data.get("next_order_number", 1)
-        data["next_order_number"] = n + 1
-        self.save_data(data)
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key = 'next_order_number'"
+            ).fetchone()
+            n = int(row["value"])
+            conn.execute(
+                "UPDATE settings SET value = ? WHERE key = 'next_order_number'",
+                (str(n + 1),),
+            )
         return n
 
-    #farm
-
+    # Farm
     def load_farm(self) -> FarmConfig | None:
-        f = self.load_data().get("farm")
-        if not f:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM farm_config WHERE id = 1"
+            ).fetchone()
+        if not row:
             return None
-        # Fill in defaults for any new fields missing from older saved data
-        defaults = {
-            "electricity_rate": 0.25,
-            "water_rate": 0.003,
-            "kwh_per_sqm_per_day": 0.3,
-            "liters_per_sqm_per_day": 3.0,
-            "seed_cost_per_sqm": 1.0,
-            "yield_kg_per_sqm": 3.0,
-            "price_per_kg": 8.0,
-            "cycle_days": 30,
-        }
-        for key, val in defaults.items():
-            if key not in f:
-                f[key] = val
-        return FarmConfig(**f)
+        return FarmConfig(
+            length=row["length"],
+            width=row["width"],
+            height=row["height"],
+            floors=row["floors"],
+            efficiency=row["efficiency"],
+            electricity_rate=row["electricity_rate"],
+            water_rate=row["water_rate"],
+            kwh_per_sqm_per_day=row["kwh_per_sqm_per_day"],
+            liters_per_sqm_per_day=row["liters_per_sqm_per_day"],
+            seed_cost_per_sqm=row["seed_cost_per_sqm"],
+            yield_kg_per_sqm=row["yield_kg_per_sqm"],
+            price_per_kg=row["price_per_kg"],
+            cycle_days=row["cycle_days"],
+        )
 
     def save_farm(self, farm: FarmConfig):
-        data = self.load_data()
-        data["farm"] = to_dict(farm)
-        self.save_data(data)
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO farm_config
+                   (id, length, width, height, floors, efficiency,
+                    electricity_rate, water_rate, kwh_per_sqm_per_day,
+                    liters_per_sqm_per_day, seed_cost_per_sqm,
+                    yield_kg_per_sqm, price_per_kg, cycle_days)
+                   VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    farm.length, farm.width, farm.height, farm.floors, farm.efficiency,
+                    farm.electricity_rate, farm.water_rate, farm.kwh_per_sqm_per_day,
+                    farm.liters_per_sqm_per_day, farm.seed_cost_per_sqm,
+                    farm.yield_kg_per_sqm, farm.price_per_kg, farm.cycle_days,
+                ),
+            )
+
+    # Legacy stubs
+    def load_data(self) -> dict:
+        """Legacy JSON method — returns empty dict. Use specific load_* methods."""
+        return {}
+
+    def save_data(self, data: dict):
+        """Legacy JSON method — no-op. Use specific save_* methods."""
+        pass
