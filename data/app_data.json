@@ -9,13 +9,51 @@
   "customers": [
     {
       "id": "3ab5a61b-3c6e-47de-9979-c53596f814ab",
-      "name": "Jemma",
+      "name": "Jemma Jeonghan",
       "address": "Tiet\u00e4j\u00e4ntie 4B 45",
       "phone": "0413111499",
       "email": "hanjemma.jeong@aalto.fi"
+    },
+    {
+      "id": "11e5ab67-198a-43ad-8ae7-7086a1f74a7a",
+      "name": "Sarah Aura",
+      "address": "JMT 11",
+      "phone": "0414939394",
+      "email": "sarah.aura@gmail.com"
+    },
+    {
+      "id": "bd2a84a4-00b1-46b7-8392-e10e1219485c",
+      "name": "Matias Aura",
+      "address": "JMT 11",
+      "phone": "0413423948",
+      "email": "matias.aura@gmail.com"
+    },
+    {
+      "id": "68ac9411-149b-4f3d-bc09-7e129ef973e8",
+      "name": "Jeanette T\u00f6rr\u00f6nen",
+      "address": "Niittykatu 11B",
+      "phone": "0415603999",
+      "email": "jeanette.torronen@gmail.com"
     }
   ],
-  "products": [],
+  "products": [
+    {
+      "id": "ff9d65f8-3fb5-4e07-a76f-c2290c9ed2a9",
+      "name": "Basil",
+      "sales_price": 9.0,
+      "cost_price": 2.0,
+      "quantity": 80,
+      "description": ""
+    },
+    {
+      "id": "d63bb21e-d2bc-4a47-8d2f-e09077d0d4c6",
+      "name": "Lettuce",
+      "sales_price": 8.0,
+      "cost_price": 3.0,
+      "quantity": 200,
+      "description": ""
+    }
+  ],
   "orders": [],
   "farm": {
     "length": 30.0,
@@ -23,5 +61,6 @@
     "height": 20.0,
     "floors": 6,
     "efficiency": 80.0
-  }
+  },
+  "next_order_number": 2
 }

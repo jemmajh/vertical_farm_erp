@@ -23,7 +23,7 @@ from erp import ERPSystem
 
 APP_STYLESHEET = """
 QWidget {
-    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
     font-size: 13px;
     color: #1a1a1a;
     background-color: #F7F9F8;
@@ -386,11 +386,7 @@ class OrderDialog(QDialog):
         self._customer_map = {c.name: c.id for c in erp.customers}
         self._customer_cb.addItems(self._customer_map.keys())
 
-        self._status_cb = QComboBox()
-        self._status_cb.addItems(["order", "quotation"])
-
         hdr_form.addRow("Customer *", self._customer_cb)
-        hdr_form.addRow("Status", self._status_cb)
         root.addWidget(hdr)
 
         lines_grp = QGroupBox("Order Lines")
@@ -440,9 +436,6 @@ class OrderDialog(QDialog):
         if order:
             if order.customer_name in self._customer_map:
                 self._customer_cb.setCurrentText(order.customer_name)
-            idx = self._status_cb.findText(order.status)
-            if idx >= 0:
-                self._status_cb.setCurrentIndex(idx)
             for line in order.lines:
                 self._lines.append((line.product_id, line.quantity))
                 fill_table_row(self._lines_table, [
@@ -516,7 +509,7 @@ class OrderDialog(QDialog):
         cname = self._customer_cb.currentText()
         return {
             "customer_id": self._customer_map[cname],
-            "status": self._status_cb.currentText(),
+            "status": "order",
             "lines": list(self._lines),
         }
 
@@ -595,7 +588,7 @@ class DashboardWidget(QWidget):
         self._stats_lbl.setStyleSheet("font-size:14px; line-height:1.6;")
         root.addWidget(self._stats_lbl)
 
-        self._canvas = FigureCanvas(Figure(figsize=(6, 3), constrained_layout=True))
+        self._canvas = FigureCanvas(Figure(figsize=(6, 3.5)))
         root.addWidget(self._canvas)
         root.addStretch()
 
@@ -998,7 +991,7 @@ class FarmSimWidget(QWidget):
         root.addWidget(self._results_lbl)
 
         # Chart
-        self._canvas = FigureCanvas(Figure(figsize=(6, 3.5), constrained_layout=True))
+        self._canvas = FigureCanvas(Figure(figsize=(6, 3.5), constrained_layout=False))
         root.addWidget(self._canvas)
         root.addStretch()
 
@@ -1070,7 +1063,7 @@ class StatsWidget(QWidget):
         self._summary_lbl.setStyleSheet("font-size:13px;")
         root.addWidget(self._summary_lbl)
 
-        self._canvas = FigureCanvas(Figure(figsize=(7, 4), constrained_layout=True))
+        self._canvas = FigureCanvas(Figure(figsize=(7, 4), constrained_layout=False))
         root.addWidget(self._canvas)
         root.addStretch()
 
@@ -1216,11 +1209,11 @@ class MainWindow(QMainWindow):
         sb_lay.setSpacing(0)
 
         # Logo / brand
-        brand = QLabel("VACUUM\nWOOD.TECH")
+        brand = QLabel("VACUUM\nWOOD\nTECH.")
         brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
         brand.setStyleSheet(
             "color:#4CAF50; font-size:16px; font-weight:900; "
-            "padding:22px 10px 18px 10px; letter-spacing:2px;"
+            "padding:22px 10px 18px 10px; letter-spacing:2px; line-height:1.4;"
         )
         sb_lay.addWidget(brand)
 
@@ -1295,9 +1288,9 @@ class LoginWindow(QWidget):
         layout.setContentsMargins(50, 50, 50, 50)
         layout.setSpacing(14)
 
-        brand = QLabel("<b>VACUUM<br>WOOD.<span style='color:#4CAF50;'>TECH</span></b>")
+        brand = QLabel("<b>VACUUM<br>WOOD<br><span style='color:#4CAF50;'>TECH.</span></b>")
         brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        brand.setStyleSheet("font-size:36px; color:#1a1a1a;")
+        brand.setStyleSheet("font-size:36px; color:#1a1a1a; line-height:1.3;")
         layout.addWidget(brand)
 
         sub = QLabel("Indoor Vertical Farm ERP")

@@ -108,6 +108,7 @@ class OrderLine:
 @dataclass
 class Order:
     id: str
+    order_number: int
     customer_id: str
     customer_name: str
     customer_address: str
