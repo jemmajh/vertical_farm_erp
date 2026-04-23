@@ -23,7 +23,7 @@ Is it possible to run the program already?
 Yes.
 
 
-Run the program using: python main_pq.py
+Run the program using: python main_qt.py
 
 The graphical user interface will open and allow the user to login and use the ERP system.
 
