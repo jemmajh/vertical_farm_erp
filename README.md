@@ -23,18 +23,15 @@ Each order records the user who created it.
 Is it possible to run the program already?  
 Yes.
 
-How is the program executed?
 
-Run the program using:
-
-python main.py
+Run the program using: python main_pq.py
 
 The graphical user interface will open and allow the user to login and use the ERP system.
 
 ## Schedule
 
 Time spent so far:  
-Approximately  hours.
+Approximately 60 hours.
 
 Changes to schedule:
 Minor adjustments were made to focus more on ERP functionality and simplify the simulation features.
