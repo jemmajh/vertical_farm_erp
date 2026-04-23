@@ -1,6 +1,5 @@
 # Mini ERP System
 
-## Checkpoint3 / Checkpoint6
 
 ## Current properties
 
